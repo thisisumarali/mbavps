@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@theme {
+  /* ── Sindhi & Pakistani Government Color Palette ── */
+
+  /* Deep forest green — Pakistani flag, govt authority */
+  --color-primary: #1a5c3a;
+
+  /* Rich crimson red — Ajrak motif accent */
+  --color-secondary: #8b1a1a;
+
+  /* Warm gold — Ajrak embroidery, official seals */
+  --color-accent: #c8963e;
+
+  /* Deep navy — formal government documents */
+  --color-neutral: #1c2e4a;
+
+  /* Warm parchment — official paper / govt cream */
+  --color-surface: #faf6ee;
+
+  /* Dark text — readable, formal */
+  --color-foreground: #1e1e1e;
+}

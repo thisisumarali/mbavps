@@ -1,0 +1,29 @@
+services:
+
+  app:
+    build: .
+    container_name: mbassociation
+
+    env_file:
+      - .env
+
+    expose:
+      - "3000"
+
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+
+    container_name: nginx
+
+    ports:
+      - "80:80"
+
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+
+    depends_on:
+      - app
+
+    restart: unless-stopped
