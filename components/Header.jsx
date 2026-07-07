@@ -51,7 +51,8 @@ export default function Header() {
       {/* Top announcement bar */}
       <div className="hidden md:flex justify-center bg-primary  text-white text-xs  md:text-sm text-center py-1 md:py-1.5 px-4 tracking-wide">
         <p className="flex justify-center">
-          Malir Bar Association, Karachi Sindh Pakistan
+          {/* Malir Bar Association, Karachi Sindh Pakistan */}
+          Pakistan Zindabad
         </p>
         <div className="flex gap-2 md:hidden">
           <span className="flex gap-1 items-center">
@@ -136,7 +137,10 @@ export default function Header() {
       </div>
 
       {/* Main navigation */}
-      <nav ref={navRef} className="bg-white md:bg-primary md:shadow-md relative z-50">
+      <nav
+        ref={navRef}
+        className="bg-white md:bg-primary md:shadow-md relative z-50"
+      >
         <div className="max-w-screen-xl mx-auto px-4 md:px-10 flex items-center justify-between md:justify-center">
           {/* Desktop nav */}
           <ul className="hidden md:flex items-center">
