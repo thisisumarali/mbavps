@@ -1,20 +1,17 @@
 "use client";
+
 import { useState, useEffect } from "react";
-import { createClient } from "@/utils/supabase/client";
 
 export default function AdminMessagesPage() {
-  const supabase = createClient();
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
 
   const fetchMessages = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from("messages")
-      .select("*")
-      .order("created_at", { ascending: false });
-    setMessages(data || []);
+    const res = await fetch("/api/messages", { cache: "no-store" });
+    const data = await res.json();
+    setMessages(data.messages || []);
     setLoading(false);
   };
 
@@ -23,16 +20,26 @@ export default function AdminMessagesPage() {
   }, []);
 
   const markRead = async (id) => {
-    await supabase.from("messages").update({ is_read: true }).eq("id", id);
+    await fetch(`/api/messages/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_read: true }),
+    });
+
     setMessages((prev) =>
       prev.map((m) => (m.id === id ? { ...m, is_read: true } : m)),
     );
-    if (selected?.id === id)
+
+    if (selected?.id === id) {
       setSelected((prev) => ({ ...prev, is_read: true }));
+    }
   };
 
   const deleteMsg = async (id) => {
-    await supabase.from("messages").delete().eq("id", id);
+    await fetch(`/api/messages/${id}`, {
+      method: "DELETE",
+    });
+
     setMessages((prev) => prev.filter((m) => m.id !== id));
     if (selected?.id === id) setSelected(null);
   };
@@ -51,7 +58,6 @@ export default function AdminMessagesPage() {
   return (
     <section className="py-10 px-6 md:px-10 lg:px-14 min-h-screen">
       <div className="max-w-6xl mx-auto">
-        {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-2xl font-bold">Messages</h1>
@@ -92,7 +98,6 @@ export default function AdminMessagesPage() {
               alignItems: "start",
             }}
           >
-            {/* Message list */}
             <div className="flex flex-col gap-2">
               {messages.map((msg) => (
                 <div
@@ -119,7 +124,9 @@ export default function AdminMessagesPage() {
                         <span className="shrink-0 w-2 h-2 rounded-full bg-accent" />
                       )}
                       <p
-                        className={`text-sm truncate ${!msg.is_read ? "font-bold" : "font-medium"}`}
+                        className={`text-sm truncate ${
+                          !msg.is_read ? "font-bold" : "font-medium"
+                        }`}
                       >
                         {msg.name}
                       </p>
@@ -138,12 +145,10 @@ export default function AdminMessagesPage() {
               ))}
             </div>
 
-            {/* Detail panel */}
             {selected && (
               <div className="rounded-xl border border-border bg-card overflow-hidden sticky top-6">
                 <div className="h-1 bg-gradient-to-r from-primary via-accent to-primary/50" />
                 <div className="p-6">
-                  {/* Subject + delete */}
                   <div className="flex items-start justify-between gap-4 mb-5">
                     <div className="min-w-0">
                       <h2 className="text-base font-bold leading-snug">
@@ -161,7 +166,6 @@ export default function AdminMessagesPage() {
                     </button>
                   </div>
 
-                  {/* Sender info grid */}
                   <div className="grid grid-cols-2 gap-x-4 gap-y-3 mb-5 p-4 rounded-lg bg-muted/40 border border-border">
                     <div>
                       <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-0.5">
@@ -190,7 +194,6 @@ export default function AdminMessagesPage() {
                     </div>
                   </div>
 
-                  {/* Message body */}
                   <div className="mb-6">
                     <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2">
                       Message

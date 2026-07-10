@@ -1,35 +1,61 @@
 import SectionHeading from "@/common/SectionHeading";
-import { createClient } from "@/utils/supabase/server";
+import { prisma } from "@/utils/prisma";
 import Image from "next/image";
 import Link from "next/link";
 
 const PAGE_SIZE = 20;
 
 const page = async ({ searchParams }) => {
-  const supabase = await createClient();
   const params = await searchParams;
   const currentPage = Number(params?.page) || 1;
   const search = params?.search || "";
-  const from = (currentPage - 1) * PAGE_SIZE;
-  const to = from + PAGE_SIZE - 1;
-  let query = supabase
-    .from("advocates")
-    .select("v_no, name, f_name, sbc_enrollment_no, mobile, image", {
-      count: "exact",
-    })
-    .order("id", { ascending: true })
-    .range(from, to);
 
-  if (search) {
-    query = query.or(`name.ilike.%${search}%,mobile.ilike.%${search}%`);
-  }
+  const skip = (currentPage - 1) * PAGE_SIZE;
 
-  const { data: members, error, count } = await query;
+  const where = search
+    ? {
+        OR: [
+          {
+            name: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+          {
+            mobile: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        ],
+      }
+    : {};
 
-  if (error) {
-    console.error("Error fetching members:", error.message);
-  }
+  const [members, count] = await Promise.all([
+    prisma.advocate.findMany({
+      where,
+      select: {
+        v_no: true,
+        name: true,
+        f_name: true,
+        sbc_enrollment_no: true,
+        mobile: true,
+        image: true,
+      },
+      orderBy: {
+        id: "asc",
+      },
+      skip,
+      take: PAGE_SIZE,
+    }),
 
+    prisma.advocate.count({
+      where,
+    }),
+  ]);
+
+  const from = skip;
+  const to = skip + PAGE_SIZE - 1;
   const totalPages = Math.ceil((count || 0) / PAGE_SIZE);
 
   const pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1)
@@ -49,7 +75,7 @@ const page = async ({ searchParams }) => {
           eyebrow="Our Members"
           title="Advocates of Malir Bar Association"
         />
-        {/* Search */}
+
         <form className="mb-6">
           <div className="relative max-w-md">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
@@ -77,12 +103,12 @@ const page = async ({ searchParams }) => {
             )}
           </div>
         </form>
-        {/* Stats bar */}
+
         <div className="flex items-center justify-between mb-8 px-1">
           <p className="text-muted-foreground text-sm">
             Showing{" "}
             <span className="text-foreground font-semibold">
-              {from + 1}–{Math.min(to + 1, count || 0)}
+              {count > 0 ? from + 1 : 0}–{Math.min(to + 1, count || 0)}
             </span>{" "}
             of <span className="text-foreground font-semibold">{count}</span>{" "}
             advocates
@@ -95,47 +121,39 @@ const page = async ({ searchParams }) => {
           </p>
         </div>
 
-        {/* Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-5">
           {members?.map((member) => (
             <div
-              key={member.v_no}
+              key={member.v_no || member.name}
               className="group flex flex-col rounded-xl border border-border/50
                          bg-card hover:border-accent/50
                          shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden"
             >
-              {/* Image */}
               <div className="relative w-full aspect-square bg-muted overflow-hidden">
                 <Image
                   src={member.image || "/user.jpg"}
-                  alt={member.name}
+                  alt={member.name || "Advocate"}
                   fill
                   sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
                   className="object-cover object-center group-hover:scale-105 transition-transform duration-500"
                 />
-                {/* Gradient overlay at bottom */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
-                {/* Leader no badge over image */}
                 <span
                   className="absolute top-2 right-2 bg-accent text-accent-foreground
                                   text-[10px] font-bold px-2 py-0.5 rounded-full shadow"
                 >
                   {member.v_no}
                 </span>
-                {/* Color bar */}
                 <div className="absolute bottom-0 inset-x-0 h-0.5 bg-gradient-to-r from-primary via-accent to-secondary" />
               </div>
 
-              {/* Info */}
               <div className="flex flex-col gap-2 p-3">
-                {/* Name */}
                 <p className="text-foreground font-bold text-sm leading-snug line-clamp-2 min-h-[2.5rem]">
                   {member.name}
                 </p>
 
                 <div className="border-t border-border/40" />
 
-                {/* Father name */}
                 <div className="flex flex-col gap-0.5">
                   <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-semibold">
                     Father
@@ -145,7 +163,6 @@ const page = async ({ searchParams }) => {
                   </p>
                 </div>
 
-                {/* Enrollment */}
                 <div className="flex flex-col gap-0.5">
                   <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-semibold">
                     Enrollment
@@ -155,7 +172,6 @@ const page = async ({ searchParams }) => {
                   </p>
                 </div>
 
-                {/* Mobile */}
                 {member.mobile && (
                   <span
                     className="flex items-center gap-1.5 mt-0.5 text-xs text-accent
@@ -172,7 +188,6 @@ const page = async ({ searchParams }) => {
           ))}
         </div>
 
-        {/* Pagination */}
         <div className="flex items-center justify-center gap-2 mt-14 flex-wrap">
           {currentPage > 1 ? (
             <Link

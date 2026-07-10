@@ -1,10 +1,9 @@
 import SectionHeading from "@/common/SectionHeading";
-import { createClient } from "@/utils/supabase/server";
+import { prisma } from "@/utils/prisma";
 import Image from "next/image";
 import Link from "next/link";
 
 const VerificationPage = async ({ searchParams }) => {
-  const supabase = await createClient();
   const params = await searchParams;
 
   const v_no = params?.v_no?.trim() || "";
@@ -13,30 +12,39 @@ const VerificationPage = async ({ searchParams }) => {
 
   const hasQuery = v_no || name || f_name;
 
-  let members = null;
-  let error = null;
+  let members = [];
 
   if (hasQuery) {
-    let query = supabase
-      .from("advocates")
-      .select("v_no, name, f_name, sbc_enrollment_no, mobile, image")
-      .order("id", { ascending: true });
+    const where = {};
 
     if (v_no) {
-      query = query.eq("v_no", Number(v_no));
+      where.v_no = Number(v_no);
     } else if (name) {
-      query = query.ilike("name", `%${name}%`);
+      where.name = {
+        contains: name,
+        mode: "insensitive",
+      };
     } else if (f_name) {
-      query = query.ilike("f_name", `%${f_name}%`);
+      where.f_name = {
+        contains: f_name,
+        mode: "insensitive",
+      };
     }
 
-    const result = await query;
-    members = result.data;
-    error = result.error;
-
-    if (error) {
-      console.error("Verification query error:", error.message);
-    }
+    members = await prisma.advocate.findMany({
+      where,
+      select: {
+        v_no: true,
+        name: true,
+        f_name: true,
+        sbc_enrollment_no: true,
+        mobile: true,
+        image: true,
+      },
+      orderBy: {
+        id: "asc",
+      },
+    });
   }
 
   return (

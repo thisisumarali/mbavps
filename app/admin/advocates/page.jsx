@@ -1,12 +1,11 @@
 "use client";
+
 import { useState, useEffect, useRef } from "react";
-import { createClient } from "@/utils/supabase/client";
 import Image from "next/image";
 
 const PAGE_SIZE = 20;
 
 export default function AdminAdvocatesPage() {
-  const supabase = createClient();
   const [members, setMembers] = useState([]);
   const [search, setSearch] = useState({ name: "", v_no: "", f_name: "" });
   const [page, setPage] = useState(1);
@@ -19,42 +18,40 @@ export default function AdminAdvocatesPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
   const fileInputRefs = useRef({});
+
   const totalPages = Math.ceil(count / PAGE_SIZE);
 
-  /* ─── Fetch ─────────────────────────────────────────────── */
   const fetchMembers = async () => {
-    const from = (page - 1) * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(PAGE_SIZE),
+    });
 
-    let query = supabase
-      .from("advocates")
-      .select("v_no, name, f_name, sbc_enrollment_no, mobile, image", {
-        count: "exact",
-      })
-      .order("id", { ascending: true })
-      .range(from, to);
+    if (search.v_no) params.set("v_no", search.v_no);
+    else if (search.name) params.set("name", search.name);
+    else if (search.f_name) params.set("f_name", search.f_name);
 
-    if (search.v_no) {
-      query = query.eq("v_no", Number(search.v_no));
-    } else if (search.name) {
-      query = query.ilike("name", `%${search.name}%`);
-    } else if (search.f_name) {
-      query = query.ilike("f_name", `%${search.f_name}%`);
+    const res = await fetch(`/api/advocates?${params.toString()}`, {
+      cache: "no-store",
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      setMembers(data.advocates || []);
+      setCount(data.total || 0);
     }
-
-    const { data, count: total } = await query;
-    setMembers(data || []);
-    setCount(total || 0);
   };
 
   useEffect(() => {
     fetchMembers();
   }, [page, search]);
 
-  /* ─── Image Upload ───────────────────────────────────────── */
   const handleImageUpload = async (member, file) => {
     if (!file) return;
+
     setUploading(member.v_no);
+
     try {
       if (member.image) {
         try {
@@ -74,23 +71,32 @@ export default function AdminAdvocatesPage() {
         "upload_preset",
         process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET,
       );
-      formData.append("public_id", `advocates/advocate_${member.v_no}`);
-
       const res = await fetch(
         `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
         { method: "POST", body: formData },
       );
+
       const cloudinaryData = await res.json();
-      if (!cloudinaryData.secure_url)
+
+      if (!cloudinaryData.secure_url) {
         throw new Error(
           cloudinaryData.error?.message || "No secure_url returned",
         );
+      }
 
-      const { error } = await supabase
-        .from("advocates")
-        .update({ image: cloudinaryData.secure_url })
-        .eq("v_no", member.v_no);
-      if (error) throw new Error("Supabase error: " + error.message);
+      const updateRes = await fetch(`/api/advocates/${member.v_no}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image: cloudinaryData.secure_url,
+        }),
+      });
+
+      const updateData = await updateRes.json();
+
+      if (!updateRes.ok || !updateData.success) {
+        throw new Error(updateData.message || "Image update failed");
+      }
 
       setMembers((prev) =>
         prev.map((m) =>
@@ -99,6 +105,7 @@ export default function AdminAdvocatesPage() {
             : m,
         ),
       );
+
       setSuccessId(member.v_no);
       setTimeout(() => setSuccessId(null), 2500);
     } catch (err) {
@@ -108,18 +115,18 @@ export default function AdminAdvocatesPage() {
     }
   };
 
-  /* ─── Delete ─────────────────────────────────────────────── */
   const handleDelete = async (member) => {
     if (
       !confirm(
         `Delete advocate "${member.name}" (V No: ${member.v_no})?\nThis cannot be undone.`,
       )
-    )
+    ) {
       return;
+    }
 
     setDeleting(member.v_no);
+
     try {
-      // Delete Cloudinary image (best effort)
       if (member.image) {
         try {
           await fetch("/api/cloudinary", {
@@ -132,11 +139,15 @@ export default function AdminAdvocatesPage() {
         } catch {}
       }
 
-      const { error } = await supabase
-        .from("advocates")
-        .delete()
-        .eq("v_no", member.v_no);
-      if (error) throw new Error("Supabase error: " + error.message);
+      const res = await fetch(`/api/advocates/${member.v_no}`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Delete failed");
+      }
 
       setMembers((prev) => prev.filter((m) => m.v_no !== member.v_no));
       setCount((c) => c - 1);
@@ -147,7 +158,6 @@ export default function AdminAdvocatesPage() {
     }
   };
 
-  /* ─── Edit / Update ──────────────────────────────────────── */
   const openEdit = (member) => {
     setEditTarget(member);
     setEditForm({
@@ -170,26 +180,36 @@ export default function AdminAdvocatesPage() {
       setEditError("Full Name is required.");
       return;
     }
+
     setEditSaving(true);
     setEditError("");
-    try {
-      const { error } = await supabase
-        .from("advocates")
-        .update({
-          name: editForm.name.trim(),
-          f_name: editForm.f_name.trim() || null,
-          sbc_enrollment_no: editForm.sbc_enrollment_no.trim() || null,
-          mobile: editForm.mobile.trim() || null,
-        })
-        .eq("v_no", editTarget.v_no);
 
-      if (error) throw new Error("Supabase error: " + error.message);
+    try {
+      const payload = {
+        name: editForm.name.trim(),
+        f_name: editForm.f_name.trim() || null,
+        sbc_enrollment_no: editForm.sbc_enrollment_no.trim() || null,
+        mobile: editForm.mobile.trim() || null,
+      };
+
+      const res = await fetch(`/api/advocates/${editTarget.v_no}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Update failed");
+      }
 
       setMembers((prev) =>
         prev.map((m) =>
-          m.v_no === editTarget.v_no ? { ...m, ...editForm } : m,
+          m.v_no === editTarget.v_no ? { ...m, ...payload } : m,
         ),
       );
+
       closeEdit();
     } catch (err) {
       setEditError(err.message);
@@ -198,7 +218,6 @@ export default function AdminAdvocatesPage() {
     }
   };
 
-  /* ─── Render ─────────────────────────────────────────────── */
   return (
     <section className="py-16 px-4 md:px-10 lg:px-20">
       <div className="max-w-7xl mx-auto">
@@ -208,7 +227,6 @@ export default function AdminAdvocatesPage() {
           Delete to remove an advocate.
         </p>
 
-        {/* Search */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl mb-3">
           {[
             {
@@ -249,68 +267,63 @@ export default function AdminAdvocatesPage() {
             </div>
           ))}
         </div>
+
         <p className="text-[11px] text-muted-foreground/50 mb-6">
           Only one field is used at a time — priority: V No → Full Name →
           Father's Name.
         </p>
 
-        {/* Stats */}
         <div className="flex items-center justify-between mb-6 text-sm text-muted-foreground">
           <span>
             Showing{" "}
             <strong className="text-foreground">
-              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, count)}
+              {count > 0 ? (page - 1) * PAGE_SIZE + 1 : 0}–
+              {Math.min(page * PAGE_SIZE, count)}
             </strong>{" "}
             of <strong className="text-foreground">{count}</strong> advocates
           </span>
           <span>
             Page <strong className="text-foreground">{page}</strong> of{" "}
-            <strong className="text-foreground">{totalPages}</strong>
+            <strong className="text-foreground">{totalPages || 1}</strong>
           </span>
         </div>
 
-        {/* Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {members.map((member) => (
             <div
               key={member.v_no}
               className="flex flex-col rounded-xl border border-border/50 bg-card shadow-sm overflow-hidden"
             >
-              {/* Clickable image area */}
               <div
                 className="relative w-full aspect-square bg-muted overflow-hidden cursor-pointer group/img"
                 onClick={() => fileInputRefs.current[member.v_no]?.click()}
               >
                 <Image
                   src={member.image || "/user.jpg"}
-                  alt={member.name}
+                  alt={member.name || "Advocate"}
                   fill
                   sizes="(max-width: 640px) 50vw, 20vw"
                   className="object-cover object-center"
                 />
 
-                {/* Hover overlay */}
                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
                   <span className="text-white text-xs font-semibold tracking-wide">
                     {uploading === member.v_no ? "Uploading…" : "Change Photo"}
                   </span>
                 </div>
 
-                {/* Success */}
                 {successId === member.v_no && (
                   <div className="absolute inset-0 bg-green-500/80 flex items-center justify-center">
                     <span className="text-white text-3xl">✓</span>
                   </div>
                 )}
 
-                {/* Loading spinner */}
                 {uploading === member.v_no && (
                   <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                     <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   </div>
                 )}
 
-                {/* Has image indicator */}
                 {member.image && (
                   <span className="absolute top-2 left-2 bg-green-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
                     ✓
@@ -332,7 +345,6 @@ export default function AdminAdvocatesPage() {
                 />
               </div>
 
-              {/* Info */}
               <div className="p-3 flex flex-col gap-1.5">
                 <p className="font-bold text-sm leading-snug line-clamp-2">
                   {member.name}
@@ -344,7 +356,6 @@ export default function AdminAdvocatesPage() {
                   {member.sbc_enrollment_no || "—"}
                 </p>
 
-                {/* Action buttons */}
                 <div className="flex gap-1.5 mt-1">
                   <button
                     onClick={() => openEdit(member)}
@@ -354,6 +365,7 @@ export default function AdminAdvocatesPage() {
                     ✏️ Edit
                   </button>
 
+                  {/* Enable if needed */}
                   {/* <button
                     onClick={() => handleDelete(member)}
                     disabled={deleting === member.v_no}
@@ -362,14 +374,12 @@ export default function AdminAdvocatesPage() {
                   >
                     {deleting === member.v_no ? "…" : "🗑 Delete"}
                   </button> */}
-
                 </div>
               </div>
             </div>
           ))}
         </div>
 
-        {/* Pagination */}
         <div className="flex items-center justify-center gap-2 mt-12 flex-wrap">
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -380,7 +390,7 @@ export default function AdminAdvocatesPage() {
             ← Prev
           </button>
 
-          {Array.from({ length: totalPages }, (_, i) => i + 1)
+          {Array.from({ length: totalPages || 1 }, (_, i) => i + 1)
             .filter(
               (p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2,
             )
@@ -414,8 +424,8 @@ export default function AdminAdvocatesPage() {
             )}
 
           <button
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages || 1, p + 1))}
+            disabled={page === (totalPages || 1)}
             className="px-4 py-2 rounded-lg text-sm font-medium border border-border
                        hover:border-accent hover:text-accent disabled:opacity-30 disabled:cursor-not-allowed transition-all"
           >
@@ -424,7 +434,6 @@ export default function AdminAdvocatesPage() {
         </div>
       </div>
 
-      {/* ── Edit Modal ──────────────────────────────────────── */}
       {editTarget && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -482,7 +491,7 @@ export default function AdminAdvocatesPage() {
                     </label>
                     <input
                       type="text"
-                      value={editForm[field]}
+                      value={editForm[field] || ""}
                       onChange={(e) =>
                         setEditForm((f) => ({ ...f, [field]: e.target.value }))
                       }

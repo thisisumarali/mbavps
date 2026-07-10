@@ -1,0 +1,33 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Advocate {
+  id                Int     @id
+  name              String?
+  f_name            String?
+  sbc_enrollment_no String?
+  mobile            String?
+  image             String?
+  v_no              Int?
+
+  @@map("advocates")
+}
+
+model Message {
+  id         Int       @id
+  name       String?
+  phone      String?
+  email      String?
+  subject    String?
+  message    String?
+  created_at DateTime?
+  is_read    Boolean?
+
+  @@map("messages")
+}
