@@ -71,6 +71,10 @@ export default function AdminAdvocatesPage() {
         "upload_preset",
         process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET,
       );
+      // Keep this in sync with the public_id the delete call above guesses,
+      // otherwise old assets never actually get removed from Cloudinary.
+      formData.append("public_id", `advocates/advocate_${member.v_no}`);
+
       const res = await fetch(
         `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
         { method: "POST", body: formData },
@@ -84,11 +88,17 @@ export default function AdminAdvocatesPage() {
         );
       }
 
+      // Bake the cache-buster into the URL itself, BEFORE saving to the DB.
+      // If we only add it to local state, every other load (reload, other
+      // device, production) reads back the bare URL and can hit a stale
+      // cached copy of the previous photo at that same URL.
+      const versionedUrl = `${cloudinaryData.secure_url}?v=${Date.now()}`;
+
       const updateRes = await fetch(`/api/advocates/${member.v_no}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          image: cloudinaryData.secure_url,
+          image: versionedUrl,
         }),
       });
 
@@ -100,9 +110,7 @@ export default function AdminAdvocatesPage() {
 
       setMembers((prev) =>
         prev.map((m) =>
-          m.v_no === member.v_no
-            ? { ...m, image: cloudinaryData.secure_url + `?v=${Date.now()}` }
-            : m,
+          m.v_no === member.v_no ? { ...m, image: versionedUrl } : m,
         ),
       );
 
