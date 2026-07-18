@@ -3,11 +3,12 @@ import { prisma } from "@/utils/prisma";
 
 export async function PATCH(request, { params }) {
   try {
+    const { id } = await params;
     const body = await request.json();
 
     await prisma.message.update({
       where: {
-        id: Number(params.id),
+        id: Number(id),
       },
       data: body,
     });
@@ -30,9 +31,11 @@ export async function PATCH(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
+    const { id } = await params;
+
     await prisma.message.delete({
       where: {
-        id: Number(params.id),
+        id: Number(id),
       },
     });
 

@@ -3,11 +3,12 @@ import { prisma } from "@/utils/prisma";
 
 export async function PATCH(request, { params }) {
   try {
+    const { v_no } = await params;
     const body = await request.json();
 
     await prisma.advocate.updateMany({
       where: {
-        v_no: Number(params.v_no),
+        v_no: Number(v_no),
       },
       data: body,
     });
@@ -30,9 +31,11 @@ export async function PATCH(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
+    const { v_no } = await params;
+
     await prisma.advocate.deleteMany({
       where: {
-        v_no: Number(params.v_no),
+        v_no: Number(v_no),
       },
     });
 
